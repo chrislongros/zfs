@@ -520,7 +520,7 @@ get_usage(zpool_help_t idx)
 		return (gettext("\ttrim [-dw] [-r <rate>] [-c | -s] "
 		    "<-a | <pool> [<device> ...]>\n"));
 	case HELP_STATUS:
-		return (gettext("\tstatus [-DdegiLPpstvx] "
+		return (gettext("\tstatus [-DdeEgiLPpstvx] "
 		    "[-c script1[,script2,...]] ...\n"
 		    "\t    [-j|--json [--json-flat-vdevs] [--json-int] "
 		    "[--json-pool-key-guid]] ...\n"
@@ -2609,6 +2609,7 @@ typedef struct status_cbdata {
 	nvlist_t	*cb_jsobj;
 	boolean_t	cb_json_as_int;
 	boolean_t	cb_json_pool_key_guid;
+	boolean_t	cb_errors_only;
 } status_cbdata_t;
 
 /* Return 1 if string is NULL, empty, or whitespace; return 0 otherwise. */
@@ -10401,6 +10402,50 @@ print_error_log(zpool_handle_t *zhp)
 }
 
 static void
+print_error_log_parsable(zpool_handle_t *zhp)
+{
+	nvlist_t *nverrlist = NULL;
+	nvpair_t *elem;
+	char *pathname;
+	size_t len = MAXPATHLEN * 2;
+
+	if (zpool_get_errlog(zhp, &nverrlist) != 0)
+		return;
+
+	pathname = safe_malloc(len);
+	elem = NULL;
+	while ((elem = nvlist_next_nvpair(nverrlist, elem)) != NULL) {
+		nvlist_t *nv;
+		uint64_t dsobj, obj;
+		char *sep;
+
+		verify(nvpair_value_nvlist(elem, &nv) == 0);
+		verify(nvlist_lookup_uint64(nv, ZPOOL_ERR_DATASET,
+		    &dsobj) == 0);
+		verify(nvlist_lookup_uint64(nv, ZPOOL_ERR_OBJECT,
+		    &obj) == 0);
+		zpool_obj_to_path_ds(zhp, dsobj, obj, pathname, len);
+
+		/*
+		 * zpool_obj_to_path_ds() returns "dataset:/path".
+		 * Split on the first colon so we can emit
+		 * tab-delimited: dataset\tobject\tpath
+		 */
+		sep = strchr(pathname, ':');
+		if (sep != NULL) {
+			*sep = '\0';
+			(void) printf("%s\t%llu\t%s\n",
+			    pathname, (u_longlong_t)obj, sep + 1);
+		} else {
+			(void) printf("%s\t%llu\t<unknown>\n",
+			    pathname, (u_longlong_t)obj);
+		}
+	}
+	free(pathname);
+	nvlist_free(nverrlist);
+}
+
+static void
 print_spares(zpool_handle_t *zhp, status_cbdata_t *cb, nvlist_t **spares,
     uint_t nspares)
 {
@@ -11012,6 +11057,19 @@ status_callback(zpool_handle_t *zhp, void *data)
 	cbp->cb_count++;
 
 	/*
+	 * If we were given 'zpool status -E', only print permanent errors
+	 * in parsable tab-delimited format.
+	 */
+	if (cbp->cb_errors_only) {
+		uint64_t nerr;
+		if (config != NULL &&
+		    nvlist_lookup_uint64(config, ZPOOL_CONFIG_ERRCOUNT,
+		    &nerr) == 0 && nerr != 0)
+			print_error_log_parsable(zhp);
+		return (0);
+	}
+
+	/*
 	 * If we were given 'zpool status -x', only report those pools with
 	 * problems.
 	 */
@@ -11155,7 +11213,7 @@ status_callback(zpool_handle_t *zhp, void *data)
 }
 
 /*
- * zpool status [-dDegiLpPstvx] [-c [script1,script2,...]] ...
+ * zpool status [-dDeEgiLpPstvx] [-c [script1,script2,...]] ...
  * 				[-j|--json [--json-flat-vdevs] [--json-int] ...
  * 				[--json-pool-key-guid]] [--power] [-T d|u] ...
  * 				[pool] [interval [count]]
@@ -11205,7 +11263,7 @@ zpool_do_status(int argc, char **argv)
 	};
 
 	/* check options */
-	while ((c = getopt_long(argc, argv, "c:jdDegiLpPstT:vx", long_options,
+	while ((c = getopt_long(argc, argv, "c:jdDeEgiLpPstT:vx", long_options,
 	    NULL)) != -1) {
 		switch (c) {
 		case 'c':
@@ -11241,6 +11299,9 @@ zpool_do_status(int argc, char **argv)
 			break;
 		case 'e':
 			cb.cb_print_unhealthy = B_TRUE;
+			break;
+		case 'E':
+			cb.cb_errors_only = B_TRUE;
 			break;
 		case 'g':
 			cb.cb_name_flags |= VDEV_NAME_GUID;
