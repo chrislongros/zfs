@@ -534,6 +534,10 @@ zfs_prop_init(void)
 	    ZFS_TYPE_FILESYSTEM, "on | off", "OVERLAY", boolean_table,
 	    sfeatures);
 
+	zprop_register_index(ZFS_PROP_PROTECTED, "protected", 0,
+	    PROP_DEFAULT, ZFS_TYPE_FILESYSTEM | ZFS_TYPE_VOLUME,
+	    "on | off", "PROTECT", boolean_table, sfeatures);
+
 	/* default index properties */
 	zprop_register_index(ZFS_PROP_VERSION, "version", 0, PROP_DEFAULT,
 	    ZFS_TYPE_FILESYSTEM | ZFS_TYPE_SNAPSHOT,

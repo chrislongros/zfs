@@ -3724,6 +3724,12 @@ zfs_destroy(zfs_handle_t *zhp, boolean_t defer)
 	}
 
 	if (error != 0 && error != ENOENT) {
+		if (error == EACCES) {
+			zfs_error_aux(zhp->zfs_hdl, dgettext(TEXT_DOMAIN,
+			    "dataset is protected"));
+			return (zfs_error(zhp->zfs_hdl, EZFS_PERM,
+			    dgettext(TEXT_DOMAIN, "cannot destroy")));
+		}
 		return (zfs_standard_error_fmt(zhp->zfs_hdl, errno,
 		    dgettext(TEXT_DOMAIN, "cannot destroy '%s'"),
 		    zhp->zfs_name));
@@ -3842,6 +3848,12 @@ zfs_destroy_snaps_nvl(libzfs_handle_t *hdl, nvlist_t *snaps, boolean_t defer)
 				nvlist_free(existing_holds);
 			break;
 		}
+		case EACCES:
+			zfs_error_aux(hdl,
+			    dgettext(TEXT_DOMAIN,
+			    "dataset is protected"));
+			ret = zfs_error(hdl, EZFS_PERM, errbuf);
+			break;
 		default:
 			ret = zfs_standard_error(hdl, errno, errbuf);
 			break;

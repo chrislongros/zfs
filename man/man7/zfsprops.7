@@ -1550,6 +1550,21 @@ whom no projectobj-specific quota is set.
 The value
 .Sy 0
 disables defaultprojectobjquota.
+.It Sy protected Ns = Ns Sy on Ns | Ns Sy off
+Controls whether this filesystem or volume can be destroyed.
+When set to
+.Sy on ,
+.Nm zfs Cm destroy
+will refuse to destroy the dataset, returning an error.
+The dataset must be explicitly unprotected
+.Pq Nm zfs Cm set Sy protected Ns = Ns Sy off
+before it can be destroyed.
+The default value is
+.Sy off .
+This property is not inherited by child datasets.
+.Pp
+This property can also be referred to by its shortened column name,
+.Sy protect .
 .It Sy readonly Ns = Ns Sy on Ns | Ns Sy off
 Controls whether this dataset can be modified.
 The default value is

@@ -49,6 +49,7 @@
 #include <sys/dsl_deadlist.h>
 #include <sys/zthr.h>
 #include <sys/spa_impl.h>
+#include <sys/dsl_prop.h>
 
 extern int zfs_snapshot_history_enabled;
 
@@ -767,11 +768,17 @@ dsl_destroy_head_check_impl(dsl_dataset_t *ds, int expected_holds)
 {
 	int error;
 	uint64_t count;
+	uint64_t val;
 	objset_t *mos;
 
 	ASSERT(!ds->ds_is_snapshot);
 	if (ds->ds_is_snapshot)
 		return (SET_ERROR(EINVAL));
+
+	if (dsl_prop_get_int_ds(ds,
+	    zfs_prop_to_name(ZFS_PROP_PROTECTED), &val) == 0 &&
+	    val != 0)
+		return (SET_ERROR(EACCES));
 
 	if (zfs_refcount_count(&ds->ds_longholds) != expected_holds)
 		return (SET_ERROR(EBUSY));
