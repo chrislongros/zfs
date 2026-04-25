@@ -29,75 +29,101 @@
 
 #
 # DESCRIPTION:
-# 'zpool create' should report which device is in use when it fails
-# because a vdev belongs to an active pool.
+# 'zpool create' should report which device is in use when the
+# create fails because a vdev belongs to an active pool.
 #
 # STRATEGY:
-# 1. Create a backing file for two block devices.
-# 2. Attach two block devices to the same file.
-# 3. Attempt to create a mirror pool using both devices.
-# 4. Verify the error message identifies the specific device.
-# 5. Verify the error message names the active pool.
+# 1. Two loopback devices on the same backing file: the create
+#    fails and the error names a device.
+# 2. Cache device of an active pool: the error names that device.
+# 3. Log device of an active pool: the error names that device.
 #
 
 verify_runnable "global"
 
-TESTFILE="$TEST_BASE_DIR/vdev_errinfo"
-TESTPOOL2="testpool_errinfo"
+TESTFILE_SHARED="$TEST_BASE_DIR/vdev_errinfo_shared"
+TESTFILE_MAIN="$TEST_BASE_DIR/vdev_errinfo_main"
+TESTFILE_AUX="$TEST_BASE_DIR/vdev_errinfo_aux"
+TESTPOOL2="testpool_errinfo_2"
+LIVEPOOL="testpool_errinfo_live"
 BLKDEV1=""
 BLKDEV2=""
+BLKMAIN=""
+BLKAUX=""
+
+function attach_blkdev # backing-file
+{
+	typeset file="$1"
+	if is_linux; then
+		losetup -f --show "$file"
+	elif is_freebsd; then
+		echo "/dev/$(mdconfig -a -t vnode -f "$file")"
+	else
+		log_unsupported "Platform not supported for this test"
+	fi
+}
+
+function detach_blkdev # device
+{
+	typeset dev="$1"
+	[[ -z "$dev" ]] && return
+	if is_linux; then
+		losetup -d "$dev" 2>/dev/null
+	elif is_freebsd; then
+		mdconfig -d -u "$dev" 2>/dev/null
+	fi
+}
 
 function cleanup
 {
-	destroy_pool $TESTPOOL2
-	destroy_pool $TESTPOOL
+	poolexists $TESTPOOL2 && destroy_pool $TESTPOOL2
+	poolexists $LIVEPOOL && destroy_pool $LIVEPOOL
+	poolexists $TESTPOOL && destroy_pool $TESTPOOL
 
-	if is_linux; then
-		[[ -n "$BLKDEV1" ]] && losetup -d "$BLKDEV1" 2>/dev/null
-		[[ -n "$BLKDEV2" ]] && losetup -d "$BLKDEV2" 2>/dev/null
-	elif is_freebsd; then
-		[[ -n "$BLKDEV1" ]] && mdconfig -d -u "$BLKDEV1" 2>/dev/null
-		[[ -n "$BLKDEV2" ]] && mdconfig -d -u "$BLKDEV2" 2>/dev/null
-	fi
+	detach_blkdev "$BLKDEV1"
+	detach_blkdev "$BLKDEV2"
+	detach_blkdev "$BLKMAIN"
+	detach_blkdev "$BLKAUX"
 
-	rm -f "$TESTFILE"
+	rm -f "$TESTFILE_SHARED" "$TESTFILE_MAIN" "$TESTFILE_AUX"
 }
 
 log_assert "'zpool create' reports device-specific errors for in-use vdevs."
 log_onexit cleanup
 
-# Create a file to back the block devices
-log_must truncate -s $MINVDEVSIZE "$TESTFILE"
+#
+# Scenario 1: two loopback devices on the same backing file
+#
+log_must truncate -s $MINVDEVSIZE "$TESTFILE_SHARED"
+BLKDEV1=$(attach_blkdev "$TESTFILE_SHARED")
+BLKDEV2=$(attach_blkdev "$TESTFILE_SHARED")
+log_note "Scenario 1 devices: $BLKDEV1 $BLKDEV2"
 
-# Attach two block devices to the same file (platform-specific)
-if is_linux; then
-	BLKDEV1=$(losetup -f --show "$TESTFILE")
-	BLKDEV2=$(losetup -f --show "$TESTFILE")
-elif is_freebsd; then
-	BLKDEV1=/dev/$(mdconfig -a -t vnode -f "$TESTFILE")
-	BLKDEV2=/dev/$(mdconfig -a -t vnode -f "$TESTFILE")
-else
-	log_unsupported "Platform not supported for this test"
-fi
+log_mustnot_expect_re "$BLKDEV1|$BLKDEV2" "" \
+    zpool create $TESTPOOL2 mirror $BLKDEV1 $BLKDEV2
 
-log_note "Using devices: $BLKDEV1 $BLKDEV2"
+#
+# Scenarios 2 and 3 share a live pool with two auxiliary roles.
+#
+log_must truncate -s $MINVDEVSIZE "$TESTFILE_MAIN" "$TESTFILE_AUX"
+BLKMAIN=$(attach_blkdev "$TESTFILE_MAIN")
+BLKAUX=$(attach_blkdev "$TESTFILE_AUX")
+log_note "Live-pool devices: main=$BLKMAIN aux=$BLKAUX"
 
-# Attempt to create a mirror pool; this should fail because both
-# devices refer to the same underlying file.
-log_mustnot zpool create $TESTPOOL2 mirror $BLKDEV1 $BLKDEV2
+#
+# Scenario 2: cache device of an active pool
+#
+log_must zpool create $LIVEPOOL $BLKMAIN cache $BLKAUX
+log_mustnot_expect_re "$BLKAUX" "" \
+    zpool create $TESTPOOL2 $BLKAUX
+log_must zpool destroy $LIVEPOOL
 
-# Re-run to capture the error message for content verification
-errmsg=$(zpool create $TESTPOOL2 mirror $BLKDEV1 $BLKDEV2 2>&1)
-log_note "zpool create output: $errmsg"
-
-# Error message should name one of the devices
-log_must eval "echo '$errmsg' | grep -qE '$BLKDEV1|$BLKDEV2'"
-
-# Error message should name the active pool
-if echo "$errmsg" | grep -q "active pool"; then
-	log_note "Error message correctly identifies the active pool"
-else
-	log_fail "Error message does not mention the active pool: $errmsg"
-fi
+#
+# Scenario 3: log device of an active pool
+#
+log_must zpool create $LIVEPOOL $BLKMAIN log $BLKAUX
+log_mustnot_expect_re "$BLKAUX" "" \
+    zpool create $TESTPOOL2 $BLKAUX
+log_must zpool destroy $LIVEPOOL
 
 log_pass "'zpool create' reports device-specific errors for in-use vdevs."
