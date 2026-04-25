@@ -169,6 +169,54 @@ function log_mustnot_expect
 	log_neg_expect "$@" || log_fail
 }
 
+# Execute a negative test and verify the captured stderr against
+# an expected extended regex and an optional forbidden extended regex.
+# Like log_mustnot_expect but matches a regex (not a substring),
+# and can also assert a pattern is absent.
+#
+# $1 - expected extended regex (required, may be empty to skip)
+# $2 - forbidden extended regex (required, may be empty to skip)
+# $3-$@ - command to execute
+
+function log_mustnot_expect_re
+{
+	typeset expected="$1"
+	typeset forbidden="$2"
+	shift 2
+
+	typeset logfile="/tmp/log.$$"
+	while [[ -e $logfile ]]; do
+		logfile="$logfile.$$"
+	done
+
+	"$@" 2>$logfile
+	typeset status=$?
+
+	if (( status == EXIT_SUCCESS )); then
+		cat $logfile >&2
+		rm -f $logfile
+		_printerror "$@" "unexpectedly exited $status"
+		log_fail
+	fi
+
+	if [[ -n "$expected" ]] && ! grep -qE -- "$expected" $logfile; then
+		cat $logfile >&2
+		rm -f $logfile
+		_printerror "$@" "stderr missing expected /$expected/"
+		log_fail
+	fi
+
+	if [[ -n "$forbidden" ]] && grep -qE -- "$forbidden" $logfile; then
+		cat $logfile >&2
+		rm -f $logfile
+		_printerror "$@" "stderr wrongly contains forbidden /$forbidden/"
+		log_fail
+	fi
+
+	rm -f $logfile
+	_printsuccess "$@" "exited $status"
+}
+
 # Signal numbers are platform-dependent
 case $(uname) in
 Darwin|FreeBSD)
