@@ -87,15 +87,19 @@ int
 check_device(const char *name, boolean_t force, boolean_t isspare,
     boolean_t iswholedisk)
 {
-	(void) iswholedisk;
 	char path[MAXPATHLEN];
+	int ret;
 
 	if (strncmp(name, _PATH_DEV, sizeof (_PATH_DEV) - 1) != 0)
 		snprintf(path, sizeof (path), "%s%s", _PATH_DEV, name);
 	else
 		strlcpy(path, name, sizeof (path));
 
-	return (check_file(path, force, isspare));
+	ret = check_file(path, force, isspare);
+	if (ret == 0 && iswholedisk)
+		ret = check_disk_partitions(path, force, isspare);
+
+	return (ret);
 }
 
 boolean_t

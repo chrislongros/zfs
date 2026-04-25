@@ -5825,7 +5825,7 @@ dump_label(const char *dev)
 		int error;
 
 		error = zfs_resolve_shortname(dev, path, MAXPATHLEN);
-		if (error == 0 && zfs_dev_is_whole_disk(path)) {
+		if (error == 0 && zfs_dev_is_whole_disk(path, NULL)) {
 			if (zfs_append_partition(path, MAXPATHLEN) == -1)
 				error = ENOENT;
 		}

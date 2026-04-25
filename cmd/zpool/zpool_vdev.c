@@ -67,6 +67,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <glob.h>
 #include <libintl.h>
 #include <libnvpair.h>
 #include <libzutil.h>
@@ -177,6 +178,45 @@ check_file_generic(const char *file, boolean_t force, boolean_t isspare)
 }
 
 /*
+ * Whole-disk vdevs may have partitions or slices that contain ZFS labels
+ * from another pool.  Without this check, the kernel rejects the operation
+ * later with a generic error.  Glob for partition siblings of the candidate
+ * path and run check_file_generic on each.
+ */
+int
+check_disk_partitions(const char *path, boolean_t force, boolean_t isspare)
+{
+	const char *patterns[] = {
+		"%sp[0-9]*",		/* GPT-style on FreeBSD and Linux */
+		"%ss[0-9]*[a-z]?",	/* MBR slices on FreeBSD */
+		"%s[0-9]*",		/* SCSI/IDE-style on Linux */
+		NULL
+	};
+	int ret = 0;
+
+	for (size_t i = 0; patterns[i] != NULL; i++) {
+		glob_t pglob;
+		char pattern[MAXPATHLEN];
+
+		memset(&pglob, 0, sizeof (pglob));
+		(void) snprintf(pattern, sizeof (pattern), patterns[i], path);
+		if (glob(pattern, 0, NULL, &pglob) != 0) {
+			globfree(&pglob);
+			continue;
+		}
+
+		for (size_t j = 0; j < pglob.gl_pathc; j++) {
+			if (check_file_generic(pglob.gl_pathv[j], force,
+			    isspare) != 0)
+				ret = -1;
+		}
+		globfree(&pglob);
+	}
+
+	return (ret);
+}
+
+/*
  * This may be a shorthand device path or it could be total gibberish.
  * Check to see if it is a known device available in zfs_vdev_paths.
  * As part of this check, see if we've been given an entire disk
@@ -190,7 +230,13 @@ is_shorthand_path(const char *arg, char *path, size_t path_size,
 
 	error = zfs_resolve_shortname(arg, path, path_size);
 	if (error == 0) {
-		*wholedisk = zfs_dev_is_whole_disk(path);
+		int wd_err = 0;
+		*wholedisk = zfs_dev_is_whole_disk(path, &wd_err);
+		if (wd_err != 0 && wd_err != ENOENT) {
+			memset(statbuf, 0, sizeof (*statbuf));
+			*wholedisk = B_FALSE;
+			return (wd_err);
+		}
 		if (*wholedisk || (stat64(path, statbuf) == 0))
 			return (0);
 	}
@@ -299,7 +345,14 @@ make_leaf_vdev(const char *arg, boolean_t is_primary, uint64_t ashift)
 			return (NULL);
 		}
 
-		wholedisk = zfs_dev_is_whole_disk(path);
+		int wd_err = 0;
+		wholedisk = zfs_dev_is_whole_disk(path, &wd_err);
+		if (wd_err != 0 && wd_err != ENOENT) {
+			(void) fprintf(stderr,
+			    gettext("cannot open '%s': %s\n"),
+			    path, strerror(wd_err));
+			return (NULL);
+		}
 		if (!wholedisk && (stat64(path, &statbuf) != 0)) {
 			(void) fprintf(stderr,
 			    gettext("cannot open '%s': %s\n"),
@@ -342,7 +395,7 @@ make_leaf_vdev(const char *arg, boolean_t is_primary, uint64_t ashift)
 			} else {
 				(void) fprintf(stderr,
 				    gettext("cannot open '%s': %s\n"),
-				    path, strerror(errno));
+				    path, strerror(err));
 				return (NULL);
 			}
 		}

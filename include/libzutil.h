@@ -128,7 +128,7 @@ _LIBZUTIL_H const char *zfs_strip_path(const char *);
 _LIBZUTIL_H int zfs_strcmp_pathname(const char *, const char *, int);
 
 _LIBZUTIL_H boolean_t zfs_dev_is_dm(const char *);
-_LIBZUTIL_H boolean_t zfs_dev_is_whole_disk(const char *);
+_LIBZUTIL_H boolean_t zfs_dev_is_whole_disk(const char *, int *);
 _LIBZUTIL_H int zfs_dev_flush(int);
 _LIBZUTIL_H char *zfs_get_underlying_path(const char *);
 _LIBZUTIL_H char *zfs_get_enclosure_sysfs_path(const char *);

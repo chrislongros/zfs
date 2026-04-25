@@ -77,15 +77,20 @@ zfs_get_underlying_path(const char *dev_name)
 }
 
 boolean_t
-zfs_dev_is_whole_disk(const char *dev_name)
+zfs_dev_is_whole_disk(const char *dev_name, int *errp)
 {
 	int fd;
+
+	if (errp != NULL)
+		*errp = 0;
 
 	fd = g_open(dev_name, 0);
 	if (fd >= 0) {
 		g_close(fd);
 		return (B_TRUE);
 	}
+	if (errp != NULL)
+		*errp = errno;
 	return (B_FALSE);
 }
 

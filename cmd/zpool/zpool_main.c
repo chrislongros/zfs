@@ -1829,7 +1829,7 @@ zpool_do_labelclear(int argc, char **argv)
 		}
 
 		error = zfs_resolve_shortname(argv[0], vdev, MAXPATHLEN);
-		if (error == 0 && zfs_dev_is_whole_disk(vdev)) {
+		if (error == 0 && zfs_dev_is_whole_disk(vdev, NULL)) {
 			if (zfs_append_partition(vdev, MAXPATHLEN) == -1)
 				error = ENOENT;
 		}

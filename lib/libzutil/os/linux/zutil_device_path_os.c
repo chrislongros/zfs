@@ -532,13 +532,19 @@ zfs_dev_is_dm(const char *dev_name)
  * it isn't.
  */
 boolean_t
-zfs_dev_is_whole_disk(const char *dev_name)
+zfs_dev_is_whole_disk(const char *dev_name, int *errp)
 {
 	struct dk_gpt *label = NULL;
 	int fd;
 
-	if ((fd = open(dev_name, O_RDONLY | O_DIRECT | O_CLOEXEC)) < 0)
+	if (errp != NULL)
+		*errp = 0;
+
+	if ((fd = open(dev_name, O_RDONLY | O_DIRECT | O_CLOEXEC)) < 0) {
+		if (errp != NULL)
+			*errp = errno;
 		return (B_FALSE);
+	}
 
 	if (efi_alloc_and_init(fd, EFI_NUMPAR, &label) != 0) {
 		(void) close(fd);
