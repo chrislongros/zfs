@@ -45,6 +45,9 @@ jobs:
           fi
 
           case "$ci_type" in
+          docs)
+            os_selection='[]'
+            ;;
           quick)
             os_selection='["almalinux8", "almalinux9", "almalinux10", "debian12", "fedora42", "freebsd15-1s", "ubuntu24"]'
             ;;
