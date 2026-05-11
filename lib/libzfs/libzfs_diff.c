@@ -828,3 +828,4 @@ zfs_show_diffs(zfs_handle_t *zhp, int outfd, const char *fromsnap,
 	}
 	return (0);
 }
+/* smoke-test edit */
