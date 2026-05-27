@@ -1058,6 +1058,10 @@ Note that this should not be set below the ZED thresholds
 (currently 10 checksums over 10 seconds)
 or else the daemon may not trigger any action.
 .
+.It Sy zfs_ccw_retry_interval Ns = Ns Sy 300 Ns s Pq int
+Interval, in seconds, before retrying a failed write to the
+configuration cache file.
+.
 .It Sy zfs_commit_timeout_pct Ns = Ns Sy 10 Ns % Pq uint
 This controls the amount of time that a ZIL block (lwb) will remain "open"
 when it isn't "full", and it has a thread waiting for it to be committed to
