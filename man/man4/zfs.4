@@ -628,6 +628,12 @@ new format when enabling the
 feature.
 The default is to convert all log entries.
 .
+.It Sy space_map_ibs Ns = Ns Sy 14 Pq int
+Indirect block shift used when allocating new space map dnodes.
+The on-disk block size of a space map header is
+.Sy 1 No << Sy space_map_ibs
+bytes.
+.
 .It Sy vdev_read_sit_out_secs Ns = Ns Sy 600 Ns s Po 10 min Pc Pq ulong
 When a slow disk outlier is detected it is placed in a sit out state.
 While sitting out the disk will not participate in normal reads, instead its

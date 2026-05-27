@@ -510,14 +510,6 @@ param_set_slop_shift(SYSCTL_HANDLER_ARGS)
 	return (0);
 }
 
-/* spacemap.c */
-
-extern int space_map_ibs;
-
-SYSCTL_INT(_vfs_zfs, OID_AUTO, space_map_ibs, CTLFLAG_RWTUN,
-	&space_map_ibs, 0, "Space map indirect block shift");
-
-
 /* vdev.c */
 
 int

@@ -1109,3 +1109,6 @@ space_map_nblocks(space_map_t *sm)
 		return (0);
 	return (DIV_ROUND_UP(space_map_length(sm), sm->sm_blksz));
 }
+
+ZFS_MODULE_PARAM(zfs, , space_map_ibs, INT, ZMOD_RW,
+	"Space map indirect block shift");
