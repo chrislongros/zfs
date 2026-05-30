@@ -6,6 +6,16 @@
 
 set -eu
 
+# We hit an apt 404 for openjdk-21-jre-headless because removing temurin
+# below cascades into apt installing another JRE to satisfy something.
+# These rdepends calls show which installed packages still want a JRE.
+for pkg in java-runtime-headless default-jre-headless openjdk-21-jre-headless; do
+  echo "##[group]rdepends $pkg"
+  apt-cache rdepends --installed --no-recommends --no-suggests \
+    --no-conflicts --no-breaks --no-replaces --no-enhances "$pkg" || true
+  echo "##[endgroup]"
+done
+
 # The default runner has a bunch of development tools and other things
 # that we do not need.  Remove them here to free up a total of 35GB.
 #
@@ -15,7 +25,7 @@ df -h /
 sudo docker image prune --all --force
 sudo docker builder prune -a
 unneeded="microsoft-edge-stable|azure-cli|google-cloud|google-chrome-stable|"\
-"temurin|llvm|firefox|mysql-server|snapd|android|dotnet|haskell|ghcup|"\
+"temurin|\bant\b|llvm|firefox|mysql-server|snapd|android|dotnet|haskell|ghcup|"\
 "powershell|julia|swift|miniconda|chromium"
 sudo apt-get -y remove $(dpkg-query -f '${binary:Package}\n' -W | grep -E "'$unneeded'")
 sudo apt-get -y autoremove
@@ -44,8 +54,11 @@ cat /etc/apt/apt-mirrors.txt
 # install needed packages
 export DEBIAN_FRONTEND="noninteractive"
 sudo apt-get -y update
-sudo apt-get install -y axel cloud-image-utils daemonize guestfs-tools \
-  virt-manager linux-modules-extra-$(uname -r) zfsutils-linux
+sudo apt-get install -y --no-install-recommends \
+  axel cloud-image-utils daemonize guestfs-tools \
+  libvirt-clients libvirt-daemon-system libvirt-daemon-driver-qemu \
+  qemu-system-x86 qemu-utils osinfo-db ovmf \
+  linux-modules-extra-$(uname -r) zfsutils-linux
 
 # generate ssh keys
 rm -f ~/.ssh/id_ed25519
