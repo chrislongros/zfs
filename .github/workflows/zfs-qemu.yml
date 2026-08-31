@@ -137,6 +137,7 @@ jobs:
       run: .github/workflows/scripts/qemu-5-setup.sh
 
     - name: Run tests
+      if: needs.test-config.outputs.ci_type != 'build'
       timeout-minutes: 270
       run: .github/workflows/scripts/qemu-6-tests.sh
       env:

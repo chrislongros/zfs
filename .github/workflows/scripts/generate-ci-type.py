@@ -9,6 +9,10 @@ ZFS-CI-Type commit tag) or "auto" (from file change heuristics).
 Prints "docs auto" if every changed file is documentation; the qemu
 matrix is skipped in that case.
 
+Prints "build auto" if every changed file is build-system or CI
+plumbing (and not pure documentation); the compile step runs but the
+test suite is skipped.
+
 Prints "quick manual" if:
 - the *last* commit message contains 'ZFS-CI-Type: quick'
 or "quick auto" if (heuristics):
@@ -42,6 +46,24 @@ DOCS_ONLY_REGEX = list(map(re.compile, [
     r'LICENSE',
     r'NOTICE',
     r'\.gitignore',
+]))
+
+"""
+Patterns of files that are build-system or CI only. Changes limited to
+these (optionally alongside documentation) need a compile check but not
+the full test suite. Note this includes the CI scripts under .github/;
+a change that alters how the tests run can still force the suite with a
+'ZFS-CI-Type: full' commit tag.
+"""
+BUILD_ONLY_REGEX = list(map(re.compile, [
+    r'\.github/.*',
+    r'configs/.*',
+    r'META',
+    r'.*\.am',
+    r'.*\.m4',
+    r'autogen\.sh',
+    r'configure\.ac',
+    r'copy-builtin',
 ]))
 
 """
@@ -114,12 +136,27 @@ if __name__ == '__main__':
         if line.strip().lower() == 'zfs-ci-type: full':
             output_type('full', 'manual',
                         f'requested by commit {commit_ref}')
+        if line.strip().lower() == 'zfs-ci-type: build':
+            output_type('build', 'manual',
+                        f'requested by commit {commit_ref}')
 
     # check changed files
     changed_files_raw = subprocess.run([
         'git', 'diff', '--name-only', head, base
     ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     changed_files = changed_files_raw.stdout.decode().splitlines()
+
+    if changed_files and all(
+            any(r.match(f) for r in DOCS_ONLY_REGEX)
+            for f in changed_files):
+        output_type('docs', 'auto',
+                    'all changed files are documentation')
+
+    if changed_files and all(
+            any(r.match(f) for r in DOCS_ONLY_REGEX + BUILD_ONLY_REGEX)
+            for f in changed_files):
+        output_type('build', 'auto',
+                    'all changed files are build system or CI')
 
     for f in changed_files:
         for r in FULL_RUN_IGNORE_REGEX:
@@ -132,12 +169,6 @@ if __name__ == '__main__':
                         'full', 'auto',
                         f'changed file "{f}" matches pattern "{r.pattern}"'
                         )
-
-    if changed_files and all(
-            any(r.match(f) for r in DOCS_ONLY_REGEX)
-            for f in changed_files):
-        output_type('docs', 'auto',
-                    'all changed files are documentation')
 
     # catch-all
     output_type('quick', 'auto',
